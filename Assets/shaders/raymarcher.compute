@@ -9,6 +9,8 @@ float4x4 _CameraInverseProjection;
 float3 _Light;
 bool positionLight;
 
+float2 _PixelOffset;
+
 static const float maxDst = 80;
 static const float epsilon = 0.001f;
 static const float shadowBias = epsilon * 50;
@@ -252,7 +254,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     Destination[id.xy] = Source[id.xy];
 
-    float2 uv = id.xy / float2(width, height) * 2 - 1;
+    float2 uv = float2((id.xy + _PixelOffset) / float2(width, height) * 2.0f - 1.0f);
     float rayDst = 0;
 
     Ray ray = CreateCameraRay(uv);

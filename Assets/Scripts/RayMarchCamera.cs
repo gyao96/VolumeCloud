@@ -6,10 +6,14 @@ public class RayMarchCamera : MonoBehaviour
 {
     public ComputeShader raymarching;
 
-    RenderTexture target;
-    Camera cam;
-    Light lightSource;
-    List<ComputeBuffer> buffersToDispose;
+    private RenderTexture target;
+    private Camera cam;
+    private Light lightSource;
+    private List<ComputeBuffer> buffersToDispose;
+
+    /* For anti-aliasing */
+    private uint _currentSample = 0;
+    private Material _addMaterial;
 
     void Init()
     {
@@ -34,6 +38,12 @@ public class RayMarchCamera : MonoBehaviour
         int threadGroupsY = Mathf.CeilToInt(cam.pixelHeight / 8.0f);
         raymarching.Dispatch(0, threadGroupsX, threadGroupsY, 1);
 
+        // Blit the result texture to the screen
+        //if (_addMaterial == null)
+        //    _addMaterial = new Material(Shader.Find("Hidden/AddShader"));
+        //_addMaterial.SetFloat("_Sample", _currentSample);
+        //_currentSample++;
+        //Graphics.Blit(target, destination, _addMaterial);
         Graphics.Blit(target, destination);
 
         foreach (var buffer in buffersToDispose)
@@ -104,6 +114,7 @@ public class RayMarchCamera : MonoBehaviour
         raymarching.SetMatrix("_CameraInverseProjection", cam.projectionMatrix.inverse);
         raymarching.SetVector("_Light", (lightIsDirectional) ? lightSource.transform.forward : lightSource.transform.position);
         raymarching.SetBool("positionLight", !lightIsDirectional);
+        raymarching.SetVector("_PixelOffset", new Vector2(Random.Range(0.1f, 0.9f), Random.Range(0.1f, 0.9f)));
     }
 
     void InitRenderTexture()
@@ -134,6 +145,15 @@ public class RayMarchCamera : MonoBehaviour
         public static int GetSize()
         {
             return sizeof(float) * 11 + sizeof(int) * 3;
+        }
+    }
+
+    private void Update()
+    {
+        if (transform.hasChanged)
+        {
+            _currentSample = 0;
+            transform.hasChanged = false;
         }
     }
 }
