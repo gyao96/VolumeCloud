@@ -12,6 +12,10 @@ bool positionLight;
 static const float maxDst = 80;
 static const float epsilon = 0.001f;
 static const float shadowBias = epsilon * 50;
+static const int numStepsLight = 5;
+static const float darknessThreshold = 0.001f;
+static const float lightAbsorptionTowardSun = 0.1f;
+static const float lightAbsorptionFromCloud = 0.9f;
 
 struct CloudBox
 {
@@ -32,40 +36,12 @@ float SphereDistance(float3 eye, float3 centre, float radius)
     return distance(eye, centre) - radius;
 }
 
-float CubeDistance(float3 eye, float3 centre, float3 size)
+float CubeDistance(float3 eye, float3 cen, float3 size)
 {
-    float3 o = abs(eye - centre) - size;
+    float3 o = abs(eye - cen) - size;
     float ud = length(max(o, 0));
     float n = max(max(min(o.x, 0), min(o.y, 0)), min(o.z, 0));
     return ud + n;
-}
-
-float RCubeDistance(float3 eye, float3 centre, float3 size, float r)
-{
-    float3 o = abs(eye - centre) - size;
-    float ud = length(max(o, 0));
-    float n = max(max(min(o.x, 0), min(o.y, 0)), min(o.z, 0));
-    return ud + n - r;
-}
-
-// Following distance functions from http://iquilezles.org/www/articles/distfunctions/distfunctions.htm
-float TorusDistance(float3 eye, float3 centre, float r1, float r2)
-{
-    float2 q = float2(length((eye - centre).xz) - r1, eye.y - centre.y);
-    return length(q) - r2;
-}
-
-float PrismDistance(float3 eye, float3 centre, float2 h)
-{
-    float3 q = abs(eye - centre);
-    return max(q.z - h.y, max(q.x * 0.866025 + eye.y * 0.5, -eye.y) - h.x * 0.5);
-}
-
-
-float CylinderDistance(float3 eye, float3 centre, float2 h)
-{
-    float2 d = abs(float2(length((eye).xz), eye.y)) - h;
-    return length(max(d, 0.0)) + max(min(d.x, 0), min(d.y, 0));
 }
 
 Ray CreateRay(float3 origin, float3 direction)
@@ -85,114 +61,63 @@ Ray CreateCameraRay(float2 uv)
     return CreateRay(origin, direction);
 }
 
-// polynomial smooth min (k = 0.1);
-// from https://www.iquilezles.org/www/articles/smin/smin.htm
-float4 Blend(float a, float b, float3 colA, float3 colB, float k)
-{
-    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-    float blendDst = lerp(b, a, h) - k * h * (1.0 - h);
-    float3 blendCol = lerp(colB, colA, h);
-    return float4(blendCol, blendDst);
-}
-
-float4 Combine(float dstA, float dstB, float3 colourA, float3 colourB)
-{
-    float dst = dstA;
-    float3 colour = colourA;
-
-    int operation = 0;
-    if (operation == 0)
-    {
-        if (dstB < dstA)
-        {
-            dst = dstB;
-            colour = colourB;
-        }
-    }
-    // Cut
-    else if (operation == 2)
-    {
-        // max(a,-b)
-        if (-dstB > dst)
-        {
-            dst = -dstB;
-            colour = colourB;
-        }
-    }
-    // Mask
-    else if (operation == 3)
-    {
-        // max(a,b)
-        if (dstB > dst)
-        {
-            dst = dstB;
-            colour = colourB;
-        }
-    }
-    // Blend mask
-    else if (operation == 4)
-    {
-        
-    }
-
-    return float4(colour, dst);
-}
-
 float GetShapeDistance(CloudBox box, float3 eye)
 {
     return CubeDistance(eye, box.position, box.size);
     // return maxDst;
 }
 
-
-float4 SceneInfo(float3 eye)
+// Returns (dstToBox, dstInsideBox). If ray misses box, dstInsideBox will be zero
+float2 rayBoxDst(float3 boxpos, float3 boxsize, float3 rayOrigin, float3 invRaydir)
 {
-    float globalDst = maxDst;
-    float3 globalColour = 1;
-    
+    float3 boundsMin = boxpos - boxsize / 2.0f;
+    float3 boundsMax = boxpos + boxsize / 2.0f;
+    // Adapted from: http://jcgt.org/published/0007/03/04/
+    float3 t0 = (boundsMin - rayOrigin) * invRaydir;
+    float3 t1 = (boundsMax - rayOrigin) * invRaydir;
+    float3 tmin = min(t0, t1);
+    float3 tmax = max(t0, t1);
+                
+    float dstA = max(max(tmin.x, tmin.y), tmin.z);
+    float dstB = min(tmax.x, min(tmax.y, tmax.z));
+
+    // CASE 1: ray intersects box from outside (0 <= dstA <= dstB)
+    // dstA is dst to nearest intersection, dstB dst to far intersection
+
+    // CASE 2: ray intersects box from inside (dstA < 0 < dstB)
+    // dstA is the dst to intersection behind the ray, dstB is dst to forward intersection
+
+    // CASE 3: ray misses box (dstA > dstB)
+
+    float dstToBox = max(0, dstA);
+    float dstInsideBox = max(0, dstB - dstToBox);
+    return float2(dstToBox, dstInsideBox);
+}
+
+float SampleDensity(float3 position)
+{
+    // TODO: Sample Texture in Noise Map
+    return 0.2f;
+}
+
+float LightMarch(float3 position)
+{
+    // TODO: March from point on ray
+    float3 dirToLight = _Light - position;
     CloudBox box = cbox[0];
-    float localDst = GetShapeDistance(box, eye);
-    float3 localColour = float3(0, 0, 0);
-      
-    float4 globalCombined = Combine(globalDst, localDst, globalColour, localColour);
-    globalColour = globalCombined.xyz;
-    globalDst = globalCombined.w;
+    float dstInsideBox = rayBoxDst(box.position, box.size, position, 1 / dirToLight).y;
+                
+    float stepSize = dstInsideBox / numStepsLight;
+    float totalDensity = 0;
 
-    return float4(globalColour, globalDst);
-}
-
-float3 EstimateNormal(float3 p)
-{
-    float x = SceneInfo(float3(p.x + epsilon, p.y, p.z)).w - SceneInfo(float3(p.x - epsilon, p.y, p.z)).w;
-    float y = SceneInfo(float3(p.x, p.y + epsilon, p.z)).w - SceneInfo(float3(p.x, p.y - epsilon, p.z)).w;
-    float z = SceneInfo(float3(p.x, p.y, p.z + epsilon)).w - SceneInfo(float3(p.x, p.y, p.z - epsilon)).w;
-    return normalize(float3(x, y, z));
-}
-
-float CalculateShadow(Ray ray, float dstToShadePoint)
-{
-    float rayDst = 0;
-    int marchSteps = 0;
-    float shadowIntensity = .2;
-    float brightness = 1;
-
-    while (rayDst < dstToShadePoint)
+    for (int step = 0; step < numStepsLight; step++)
     {
-        marchSteps++;
-        float4 sceneInfo = SceneInfo(ray.origin);
-        float dst = sceneInfo.w;
-        
-        if (dst <= epsilon)
-        {
-            return shadowIntensity;
-        }
-
-        brightness = min(brightness, dst * 200);
-
-        ray.origin += ray.direction * dst;
-        rayDst += dst;
+        position += dirToLight * stepSize;
+        totalDensity += max(0, SampleDensity(position) * stepSize);
     }
-    return shadowIntensity + (1 - shadowIntensity) * brightness;
+
+    float transmittance = exp(-totalDensity * lightAbsorptionTowardSun);
+    return darknessThreshold + transmittance * (1 - darknessThreshold);
 }
 
 [numthreads(8, 8, 1)]
@@ -208,7 +133,48 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 
     Ray ray = CreateCameraRay(uv);
     int marchSteps = 0;
+    
+    CloudBox box = cbox[0];
 
+    float2 rayToBoxInfo = rayBoxDst(box.position, box.size, ray.origin, 1.0f / ray.direction);
+    float dstToBox = rayToBoxInfo.x;
+    float dstInsideBox = rayToBoxInfo.y;
+    // Point of entry from ray into the cloud container
+    float3 entryPoint = ray.origin + ray.direction * dstToBox;
+    
+    // TODO: Phase Function
+    float dstLimit = min(maxDst - dstToBox, dstInsideBox);
+    
+    // March through the volume
+    float dstTravelled = 0.0f;
+    float transmittance = 1.0f;
+    float lightEnergy = 0.0f;
+    const float STEPSIZE = 0.01f;
+    
+    float3 rayPos;
+    while (dstTravelled < dstLimit)
+    {
+        rayPos = entryPoint + ray.direction * dstTravelled;
+        float density = SampleDensity(rayPos);
+        if (density > 0)
+        {
+            float lightTransmittance = LightMarch(rayPos);
+            lightEnergy += density * STEPSIZE * transmittance * lightTransmittance;
+            transmittance *= exp(-density * STEPSIZE * lightAbsorptionFromCloud);
+            if (transmittance < 0.01f)
+            {
+                break;
+            }
+        }
+        dstTravelled += STEPSIZE;
+    }
+    
+    float3 bgColor = Source[id.xy];
+    float3 LightColor = float3(1, 1, 1);
+    float3 cloudColor = lightEnergy * LightColor;
+    float3 color = bgColor * transmittance + cloudColor;
+    Destination[id.xy] = float4(color, 1.0f);
+/*
     while (rayDst < maxDst)
     {
         marchSteps++;
@@ -226,7 +192,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             
 
             float3 base = col * lighting;
-            Destination[id.xy] = float4(col, 1.0f);
+            Destination[id.xy] = Destination[id.xy] * 0.2f + float4(col, 1.0f) * 0.8f;
 
             break;
         }
@@ -234,4 +200,5 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         ray.origin += ray.direction * dst;
         rayDst += dst;
     }
+*/
 }
