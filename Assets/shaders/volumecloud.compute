@@ -3,19 +3,48 @@
 Texture2D<float4> Source;
 RWTexture2D<float4> Destination;
 
+Texture3D<float4> NoiseTex;
+Texture3D<float4> DetailNoiseTex;
+Texture2D<float4> BlueNoise;
+
+SamplerState samplerNoiseTex;
+SamplerState samplerDetailNoiseTex;
+
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
 
 float3 _Light;
 bool positionLight;
 
-static const float maxDst = 80;
+float scale;
+float densityMultiplier;
+float densityOffset;
+float lightAbsorptionTowardSun;
+float lightAbsorptionFromCloud;
+float darknessThreshold;
+float3 params;
+float rayOffsetStrength;
+float detailNoiseScale;
+float detailNoiseWeight;
+float3 shapeOffset;
+float3 detailOffset;
+float3 detailWeights;
+float3 detailNoiseWeights;
+float4 shapeNoiseWeights;
+float4 phaseParams;
+int numStepsLight;
+float timeScale;
+float baseSpeed;
+float detailSpeed;
+
+float4 skyBaseColor;
+float4 skyTintColor;
+
+
+
+static const float maxDst = 1000;
 static const float epsilon = 0.001f;
 static const float shadowBias = epsilon * 50;
-static const int numStepsLight = 5;
-static const float darknessThreshold = 0.001f;
-static const float lightAbsorptionTowardSun = 0.1f;
-static const float lightAbsorptionFromCloud = 0.9f;
 
 struct CloudBox
 {
@@ -24,6 +53,8 @@ struct CloudBox
 };
 
 StructuredBuffer<CloudBox> cbox;
+
+CloudBox box;
 
 struct Ray
 {
@@ -96,15 +127,51 @@ float2 rayBoxDst(float3 boxpos, float3 boxsize, float3 rayOrigin, float3 invRayd
 
 float SampleDensity(float3 position)
 {
-    // TODO: Sample Texture in Noise Map
-    return 0.2f;
+    // Sample Texture in Noise Map
+    const int mipmapLevel = 0;
+    const float baseScale = 1 / 1000.0f;
+    const float offsetSpeed = 1 / 100.0f;
+    
+    // Calculate texture sample points
+    float time = 0.0f * timeScale;
+    float3 size = box.size;
+    float3 center = box.position;
+    float3 uvw = (size * 0.5f + position) * baseScale * scale;
+    float3 shapeSamplePos = uvw + shapeOffset * offsetSpeed;
+    
+    // TODO: Calculate fade off along edges of xz plane
+    
+    // TODO: Calculate height gradient from weather map
+    
+    // Calculate base shape density
+    float4 shapeNoise = NoiseTex.SampleLevel(samplerNoiseTex, shapeSamplePos, mipmapLevel);
+    float4 normalizedShapeWeights = shapeNoiseWeights / dot(shapeNoiseWeights, 1);
+    float shapeFBM = dot(shapeNoise, normalizedShapeWeights); // * heightGradient;
+    float baseShapeDensity = shapeFBM + densityOffset * .1;
+    // Save sampling from detail tex if shape density <= 0
+    //if (baseShapeDensity > 0)
+    //{
+    //                // Sample detail noise
+    //    float3 detailSamplePos = uvw * detailNoiseScale + detailOffset * offsetSpeed + float3(time * .4, -time, time * 0.1) * detailSpeed;
+    //    float4 detailNoise = DetailNoiseTex.SampleLevel(samplerDetailNoiseTex, detailSamplePos, mipmapLevel);
+    //    float3 normalizedDetailWeights = detailWeights / dot(detailWeights, 1);
+    //    float detailFBM = dot(detailNoise.xyz, normalizedDetailWeights);
+
+    //                // Subtract detail noise from base shape (weighted by inverse density so that edges get eroded more than centre)
+    //    float oneMinusShape = 1 - shapeFBM;
+    //    float detailErodeWeight = oneMinusShape * oneMinusShape * oneMinusShape;
+    //    float cloudDensity = baseShapeDensity - (1 - detailFBM) * detailErodeWeight * detailNoiseWeight;
+    
+    //    return cloudDensity * densityMultiplier * 0.1;
+    //}
+    return shapeNoise;
 }
 
 float LightMarch(float3 position)
 {
-    // TODO: March from point on ray
+    // March from point on ray
     float3 dirToLight = _Light - position;
-    CloudBox box = cbox[0];
+
     float dstInsideBox = rayBoxDst(box.position, box.size, position, 1 / dirToLight).y;
                 
     float stepSize = dstInsideBox / numStepsLight;
@@ -134,7 +201,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     Ray ray = CreateCameraRay(uv);
     int marchSteps = 0;
     
-    CloudBox box = cbox[0];
+    box = cbox[0];
 
     float2 rayToBoxInfo = rayBoxDst(box.position, box.size, ray.origin, 1.0f / ray.direction);
     float dstToBox = rayToBoxInfo.x;

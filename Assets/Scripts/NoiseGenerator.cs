@@ -20,6 +20,7 @@ public class NoiseGenerator : MonoBehaviour
     public int shapeResolution = 128;
     public int detailResolution = 32;
     public WorleyNoiseSetting[] shapeSettings;
+    public WorleyNoiseSetting[] detailSettings;
 
     public ComputeShader noiseCompute;
 
@@ -43,19 +44,31 @@ public class NoiseGenerator : MonoBehaviour
     public RenderTexture shapeTexture;
     [SerializeField, HideInInspector]
     public RenderTexture detailTexture;
-    private bool updateNoise = true;
+    private bool needUpdate = true;
+    private TextureChannel generatedChannel;
+    private CloudNoiseType generatedType;
 
-    public void UpdateNoise()
+    public bool UpdateNoise()
     {
+        detailResolution = Mathf.Max(1, detailResolution);
+        shapeResolution = Mathf.Max(1, shapeResolution);
         CreateTexture(ref shapeTexture, shapeResolution, shapeNoiseName);
+        CreateTexture(ref detailTexture, detailResolution, detailNoiseName);
 
         WorleyNoiseSetting activeSetting = ActiveSetting;
 
-        if (!noiseCompute || !activeSetting)
+        if (SettingChanged())
         {
-            return;
+            needUpdate = true;
         }
 
+        if (!needUpdate||!noiseCompute || !activeSetting)
+        {
+            return false;
+        }
+        needUpdate = false;
+        generatedChannel = activeChannel;
+        generatedType = activeTextureType;
         var timer = System.Diagnostics.Stopwatch.StartNew ();
         buffersToRelease = new List<ComputeBuffer>();
         int activeTextureResolution = ActiveTexture.width;
@@ -88,6 +101,7 @@ public class NoiseGenerator : MonoBehaviour
         {
             buffer.Release();
         }
+        return true;
     }
     void UpdateWorley(WorleyNoiseSetting setting)
     {
@@ -164,7 +178,7 @@ public class NoiseGenerator : MonoBehaviour
     {
         get
         {
-            WorleyNoiseSetting[] settings = shapeSettings;
+            WorleyNoiseSetting[] settings = (activeTextureType == CloudNoiseType.Shape) ? shapeSettings : detailSettings;
             int activeChannelIndex = (int)activeChannel;
             if (activeChannelIndex >= settings.Length)
             {
@@ -177,7 +191,7 @@ public class NoiseGenerator : MonoBehaviour
     {
         get
         {
-            return shapeTexture;
+            return (activeTextureType == CloudNoiseType.Shape) ? shapeTexture : detailTexture;
         }
     }
     public Vector4 ChannelMask
@@ -194,5 +208,8 @@ public class NoiseGenerator : MonoBehaviour
         }
     }
 
-
+    public bool SettingChanged()
+    {
+        return activeTextureType != generatedType || activeChannel != generatedChannel;
+    }
 }

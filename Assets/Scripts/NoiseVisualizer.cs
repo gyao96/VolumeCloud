@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-[ExecuteInEditMode]
 public class NoiseVisualizer : MonoBehaviour
 {
     public ComputeShader slicer;
@@ -13,17 +12,12 @@ public class NoiseVisualizer : MonoBehaviour
     int resolution;
     MeshRenderer renderer;
     NoiseGenerator noise;
-    bool needUpdate;
-    int activeChannel;
-    // Start is called before the first frame update
     void Start()
     {
         noise = FindObjectOfType<NoiseGenerator>();
-        noise.UpdateNoise();
-        needUpdate = false;
-        activeChannel = (int) noise.activeChannel;
+        bool flag = noise.UpdateNoise();
+        Debug.Log(flag);
         RenderTextureToTex2DSlices(noise.ActiveTexture);
-        
         renderer = GetComponent<MeshRenderer>();
         UpdateTexture2D();
         renderer.material.SetTexture("_MainTex", tex2D);
@@ -32,11 +26,11 @@ public class NoiseVisualizer : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (activeChannel != (int)noise.activeChannel)
+        noise.UpdateNoise();
+        RenderTextureToTex2DSlices(noise.ActiveTexture);
+        if (!renderer)
         {
-            noise.UpdateNoise();
-            RenderTextureToTex2DSlices(noise.ActiveTexture);
-            activeChannel = (int) noise.activeChannel;
+            renderer = GetComponent<MeshRenderer>();
         }
         UpdateTexture2D();
         renderer.material.SetTexture("_MainTex", tex2D);
