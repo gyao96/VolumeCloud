@@ -145,25 +145,7 @@ float SampleDensity(float3 position)
     
     // Calculate base shape density
     float4 shapeNoise = NoiseTex.SampleLevel(samplerNoiseTex, shapeSamplePos, mipmapLevel);
-    float4 normalizedShapeWeights = shapeNoiseWeights / dot(shapeNoiseWeights, 1);
-    float shapeFBM = dot(shapeNoise, normalizedShapeWeights); // * heightGradient;
-    float baseShapeDensity = shapeFBM + densityOffset * .1;
-    // Save sampling from detail tex if shape density <= 0
-    //if (baseShapeDensity > 0)
-    //{
-    //                // Sample detail noise
-    //    float3 detailSamplePos = uvw * detailNoiseScale + detailOffset * offsetSpeed + float3(time * .4, -time, time * 0.1) * detailSpeed;
-    //    float4 detailNoise = DetailNoiseTex.SampleLevel(samplerDetailNoiseTex, detailSamplePos, mipmapLevel);
-    //    float3 normalizedDetailWeights = detailWeights / dot(detailWeights, 1);
-    //    float detailFBM = dot(detailNoise.xyz, normalizedDetailWeights);
 
-    //                // Subtract detail noise from base shape (weighted by inverse density so that edges get eroded more than centre)
-    //    float oneMinusShape = 1 - shapeFBM;
-    //    float detailErodeWeight = oneMinusShape * oneMinusShape * oneMinusShape;
-    //    float cloudDensity = baseShapeDensity - (1 - detailFBM) * detailErodeWeight * detailNoiseWeight;
-    
-    //    return cloudDensity * densityMultiplier * 0.1;
-    //}
     return shapeNoise;
 }
 
