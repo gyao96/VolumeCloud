@@ -6,9 +6,11 @@ RWTexture2D<float4> Destination;
 Texture3D<float4> NoiseTex;
 Texture3D<float4> DetailNoiseTex;
 Texture2D<float4> BlueNoise;
+Texture2D<float4> WhetherMap;
 
 SamplerState samplerNoiseTex;
 SamplerState samplerDetailNoiseTex;
+SamplerState samplerWhetherMap;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
@@ -40,9 +42,7 @@ float detailSpeed;
 float4 skyBaseColor;
 float4 skyTintColor;
 
-
-
-static const float maxDst = 1000;
+static const float maxDst = 500;
 static const float epsilon = 0.001f;
 static const float shadowBias = epsilon * 50;
 
@@ -142,11 +142,16 @@ float SampleDensity(float3 position)
     // TODO: Calculate fade off along edges of xz plane
     
     // TODO: Calculate height gradient from weather map
+    float heightGradient = 0.5f;
     
     // Calculate base shape density
     float4 shapeNoise = NoiseTex.SampleLevel(samplerNoiseTex, shapeSamplePos, mipmapLevel);
+    float4 normalizedShapeWeights = shapeNoiseWeights / dot(shapeNoiseWeights, 1);
+    float shapeFBM = dot(shapeNoise, normalizedShapeWeights) * heightGradient;
+    float baseShapeDensity = shapeFBM + densityOffset * .1;
+    // float4 whetherShape = WhetherMap.SampleLevel(samplerWhetherMap, shapeSamplePos, mipmapLevel);
 
-    return shapeNoise;
+    return baseShapeDensity;
 }
 
 float LightMarch(float3 position)

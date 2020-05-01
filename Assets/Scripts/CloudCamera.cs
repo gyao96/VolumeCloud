@@ -58,6 +58,7 @@ public class CloudCamera : MonoBehaviour
     private Light lightSource;
     private List<ComputeBuffer> buffersToDispose;
     private NoiseGenerator noise;
+    private WeatherMap whetherMap;
 
     void Init()
     {
@@ -65,14 +66,15 @@ public class CloudCamera : MonoBehaviour
         lightSource = FindObjectOfType<Light>();
         buffersToDispose = new List<ComputeBuffer>();
         noise = FindObjectOfType<NoiseGenerator>();
+        whetherMap = FindObjectOfType<WeatherMap>();
     }
-
 
     void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
         Init();
 
         noise.UpdateNoise();
+        whetherMap.UpdateMap();
 
         InitRenderTexture();
         CreateScene();
@@ -98,7 +100,6 @@ public class CloudCamera : MonoBehaviour
     void CreateScene()
     {
         CloudBox cbox = FindObjectOfType<CloudBox>();
-
 
         CloudBoxData[] cboxData = new CloudBoxData[1];
         cboxData[0] = new CloudBoxData()
@@ -149,6 +150,7 @@ public class CloudCamera : MonoBehaviour
         cloudShader.SetTexture(0, "NoiseTex", noise.shapeTexture);
         cloudShader.SetTexture(0, "DetailNoiseTex", noise.detailTexture);
         cloudShader.SetTexture(0, "BlueNoise", blueNoise);
+        cloudShader.SetTexture(0, "WhetherMap", whetherMap.weatherMap);
     }
 
     void InitRenderTexture()
