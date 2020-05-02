@@ -18,7 +18,6 @@ public class WeatherMap : MonoBehaviour {
 
     List<ComputeBuffer> buffersToRelease;
     public Vector2 minMax = new Vector2 (0, 1);
-    //public int[] minMaxTest;
 
     public void UpdateMap () {
         var sw = System.Diagnostics.Stopwatch.StartNew ();

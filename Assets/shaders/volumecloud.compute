@@ -42,7 +42,7 @@ float detailSpeed;
 float4 skyBaseColor;
 float4 skyTintColor;
 
-static const float maxDst = 500;
+static const float maxDst = 3000;
 static const float epsilon = 0.001f;
 static const float shadowBias = epsilon * 50;
 
@@ -125,6 +125,11 @@ float2 rayBoxDst(float3 boxpos, float3 boxsize, float3 rayOrigin, float3 invRayd
     return float2(dstToBox, dstInsideBox);
 }
 
+float remap(float v, float minOld, float maxOld, float minNew, float maxNew)
+{
+    return minNew + (v - minOld) * (maxNew - minNew) / (maxOld - minOld);
+}
+
 float SampleDensity(float3 position)
 {
     // Sample Texture in Noise Map
@@ -134,15 +139,26 @@ float SampleDensity(float3 position)
     
     // Calculate texture sample points
     float time = 0.0f * timeScale;
-    float3 size = box.size;
     float3 center = box.position;
-    float3 uvw = (size * 0.5f + position) * baseScale * scale;
+    float3 uvw = (box.size * 0.5f + position) * baseScale * scale;
     float3 shapeSamplePos = uvw + shapeOffset * offsetSpeed;
     
     // TODO: Calculate fade off along edges of xz plane
+    const float containerEdgeFadeDst = 50.0f;
+    float3 boundsMin = center - box.size / 2.0f;
+    float3 boundsMax = center + box.size / 2.0f;
+    float dstFromEdgeX = min(containerEdgeFadeDst, min(position.x - boundsMin.x, boundsMax.x - position.x));
+    float dstFromEdgeZ = min(containerEdgeFadeDst, min(position.z - boundsMin.z, boundsMax.z - position.z));
+    float edgeWeight = min(dstFromEdgeZ, dstFromEdgeX) / containerEdgeFadeDst;
     
     // TODO: Calculate height gradient from weather map
-    float heightGradient = 0.5f;
+    float2 weatherUV = (box.size.xz * 0.5f + (position.xz - center.xz)) / max(box.size.x, box.size.z);
+    float wNoise = WhetherMap.SampleLevel(samplerWhetherMap, weatherUV, mipmapLevel).x;
+    float gMin = remap(wNoise.x, 0, 1, 0.1, 0.5);
+    float gMax = remap(wNoise.x, 0, 1, gMin, 0.9);
+    float heightPercent = (position.y - boundsMin.y) / box.size.y;
+    float heightGradient = saturate(remap(heightPercent, 0.0, gMin, 0, 1)) * saturate(remap(heightPercent, 1, gMax, 0, 1));
+    heightGradient *= edgeWeight;
     
     // Calculate base shape density
     float4 shapeNoise = NoiseTex.SampleLevel(samplerNoiseTex, shapeSamplePos, mipmapLevel);
@@ -151,7 +167,11 @@ float SampleDensity(float3 position)
     float baseShapeDensity = shapeFBM + densityOffset * .1;
     // float4 whetherShape = WhetherMap.SampleLevel(samplerWhetherMap, shapeSamplePos, mipmapLevel);
 
-    return baseShapeDensity;
+    if (baseShapeDensity > 0)
+    {
+        return baseShapeDensity;
+    }
+    return 0.0f;
 }
 
 float LightMarch(float3 position)
@@ -174,7 +194,7 @@ float LightMarch(float3 position)
     return darknessThreshold + transmittance * (1 - darknessThreshold);
 }
 
-[numthreads(8, 8, 1)]
+[numthreads(8, 8, 8)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
     uint width, height;
@@ -203,7 +223,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float dstTravelled = 0.0f;
     float transmittance = 1.0f;
     float lightEnergy = 0.0f;
-    const float STEPSIZE = 0.01f;
+    const float STEPSIZE = 2.0f;
     
     float3 rayPos;
     while (dstTravelled < dstLimit)
