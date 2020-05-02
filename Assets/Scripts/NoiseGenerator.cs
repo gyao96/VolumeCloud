@@ -62,7 +62,7 @@ public class NoiseGenerator : MonoBehaviour
             needUpdate = true;
         }
 
-        if (!needUpdate||!noiseCompute || !activeSetting)
+        if (!needUpdate || !noiseCompute || !activeSetting)
         {
             return false;
         }
