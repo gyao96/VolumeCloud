@@ -153,7 +153,7 @@ float SampleDensity(float3 position)
     float wNoise = WhetherMap.SampleLevel(samplerWhetherMap, weatherUV, mipmapLevel).x;
     float gMin = remap(wNoise.x, 0, 1, 0.1, 0.5);
     float gMax = remap(wNoise.x, 0, 1, gMin, 0.9);
-    float heightPercent = -(position.y - boundsMax.y) / box.size.y;
+    float heightPercent = (position.y - boundsMin.y) / box.size.y;
     float heightGradient = saturate(remap(heightPercent, 0.0, gMin, 0, 1)) * saturate(remap(heightPercent, 1, gMax, 0, 1));
     heightGradient *= edgeWeight;
     
@@ -162,7 +162,6 @@ float SampleDensity(float3 position)
     float4 normalizedShapeWeights = shapeNoiseWeights / dot(shapeNoiseWeights, 1);
     float shapeFBM = dot(shapeNoise, normalizedShapeWeights) * heightGradient;
     float baseShapeDensity = shapeFBM + densityOffset * .1;
-    // float4 whetherShape = WhetherMap.SampleLevel(samplerWhetherMap, shapeSamplePos, mipmapLevel);
 
     if (baseShapeDensity > 0)
     {
@@ -195,7 +194,7 @@ float LightMarch(float3 position)
         totalDensity += max(0, SampleDensity(position) * stepSize);
     }
 
-    float transmittance = exp(-totalDensity * lightAbsorptionTowardSun);
+    float transmittance = exp(totalDensity * lightAbsorptionTowardSun);
     return darknessThreshold + transmittance * (1 - darknessThreshold);
 }
 
@@ -219,7 +218,7 @@ float beer(float d)
     return beer;
 }
 
-[numthreads(8, 8, 16)]
+[numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
     uint width, height;
@@ -256,7 +255,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float dstTravelled = randomOffset;
     float transmittance = 1.0f;
     float lightEnergy = 0.0f;
-    const float STEPSIZE = 24.0f;
+    const float STEPSIZE = 12.0f;
     
     float3 rayPos;
     while (dstTravelled < dstLimit)
@@ -286,38 +285,11 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     
     // Sun
     float focusedEyeCos = pow(saturate(cosAngle), params.x);
-    float sun = saturate(hg(focusedEyeCos, 0.9995f)) * transmittance;
+    float sun = saturate(hg(focusedEyeCos, 0.995f)) * transmittance;
     
     // Render Clouds
     float3 cloudColor = lightEnergy * _LightColor.rgb;
     float3 color = bgColor * transmittance + cloudColor;
     color = saturate(color) * (1.0f - sun) + _LightColor.rgb * sun;
     Destination[id.xy] = float4(color, 1.0f);
-/*
-    while (rayDst < maxDst)
-    {
-        marchSteps++;
-        float4 sceneInfo = SceneInfo(ray.origin);
-        float dst = sceneInfo.w;
-        
-        if (dst <= epsilon)
-        {
-            float3 pointOnSurface = ray.origin + ray.direction * dst;
-            float3 normal = EstimateNormal(pointOnSurface - ray.direction * epsilon);
-            float delta = abs(dot(normal, ray.direction));
-            float3 lightDir = (positionLight) ? normalize(_Light - ray.origin) : -_Light;
-            float lighting = saturate(saturate(dot(normal, lightDir)));
-            float3 col = sceneInfo.xyz;
-            
-
-            float3 base = col * lighting;
-            Destination[id.xy] = Destination[id.xy] * 0.2f + float4(col, 1.0f) * 0.8f;
-
-            break;
-        }
-
-        ray.origin += ray.direction * dst;
-        rayDst += dst;
-    }
-*/
 }

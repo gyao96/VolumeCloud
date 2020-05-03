@@ -86,7 +86,7 @@ public class CloudCamera : MonoBehaviour
 
         int threadGroupsX = Mathf.CeilToInt(cam.pixelWidth / 8.0f);
         int threadGroupsY = Mathf.CeilToInt(cam.pixelHeight / 8.0f);
-        cloudShader.Dispatch(0, threadGroupsX, threadGroupsY, 16);
+        cloudShader.Dispatch(0, threadGroupsX, threadGroupsY, 1);
 
         // Blit the result texture to the screen
         Graphics.Blit(target, destination);
@@ -97,6 +97,17 @@ public class CloudCamera : MonoBehaviour
         }
     }
 
+    private void Start()
+    {
+        Init();
+        whetherMap.ManualUpdate();
+    }
+
+    private void Update()
+    {
+        shapeOffset.z -= Time.deltaTime * timeScale * baseSpeed;
+        detailOffset.z -= Time.deltaTime * timeScale * detailSpeed;
+    }
     void CreateScene()
     {
         CloudBox cbox = FindObjectOfType<CloudBox>();

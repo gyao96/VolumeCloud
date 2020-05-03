@@ -16,6 +16,22 @@ public class WeatherMapEditor : Editor
             DrawSettingsEditor(weather.noiseSettings, ref weather.showSettingsEditor, ref noiseSettingsEditor);
         }
 
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Update"))
+        {
+            weather.ManualUpdate();
+            EditorApplication.QueuePlayerLoopUpdate();
+        }
+        if (GUILayout.Button("Save"))
+        {
+
+        }
+        if (GUILayout.Button("Load"))
+        {
+
+        }
+        GUILayout.EndHorizontal();
+
     }
 
 

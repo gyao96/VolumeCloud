@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b0d66a2902777484ca21ae28d330f94b, type: 3}
   m_Name: Simplex Noise Settings
   m_EditorClassIdentifier: 
-  seed: 3
-  numLayers: 1
-  scale: 1
-  lacunarity: 2
-  persistence: 0.5
-  offset: {x: 0, y: 0}
+  seed: 9
+  numLayers: 4
+  scale: 3.58
+  lacunarity: 2.35
+  persistence: 0.66
+  offset: {x: -29.4, y: 50.2}

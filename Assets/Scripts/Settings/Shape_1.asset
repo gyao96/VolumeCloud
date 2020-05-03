@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: Shape_1
   m_EditorClassIdentifier: 
   seed: 1
-  numDivisionsA: 3
-  numDivisionsB: 7
-  numDivisionsC: 11
+  numDivisionsA: 5
+  numDivisionsB: 8
+  numDivisionsC: 13
   persistence: 0.65
   tile: 1
   invert: 1

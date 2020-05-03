@@ -8,6 +8,7 @@ public class WeatherMap : MonoBehaviour {
     public ComputeShader noiseCompute;
     public SimplexNoiseSettings noiseSettings;
     public int resolution = 512;
+    [SerializeField, HideInInspector]
     public RenderTexture weatherMap;
     public Vector4 testParams;
     public Transform container;
@@ -17,9 +18,17 @@ public class WeatherMap : MonoBehaviour {
     public bool showSettingsEditor = true;
 
     List<ComputeBuffer> buffersToRelease;
+    [HideInInspector]
     public Vector2 minMax = new Vector2 (0, 1);
+    private bool needUpdate = true;
 
     public void UpdateMap () {
+
+        if (!needUpdate)
+        {
+            return;
+        }
+
         var sw = System.Diagnostics.Stopwatch.StartNew ();
 
         CreateTexture (ref weatherMap, resolution);
@@ -52,10 +61,10 @@ public class WeatherMap : MonoBehaviour {
         noiseCompute.Dispatch (0, numThreadGroups, numThreadGroups, 1);
 
         noiseCompute.SetTexture (1, "Result", weatherMap);
-        //noiseCompute.Dispatch (1, numThreadGroups, numThreadGroups, 1);
+        noiseCompute.Dispatch(1, numThreadGroups, numThreadGroups, 1);
 
-        //minMaxTest = new int[2];
-        //minMaxBuffer.GetData (minMaxTest);
+        var minMaxTest = new int[2];
+        minMaxBuffer.GetData(minMaxTest);
 
         // Release buffers
         foreach (var buffer in buffersToRelease) {
@@ -65,6 +74,13 @@ public class WeatherMap : MonoBehaviour {
         if (logTime) {
             Debug.Log ("Weather gen: " + sw.ElapsedMilliseconds + " ms.");
         }
+        needUpdate = false;
+    }
+
+    public void ManualUpdate()
+    {
+        needUpdate = true;
+        UpdateMap();
     }
 
     // Create buffer with some data, and set in shader. Also add to list of buffers to be released

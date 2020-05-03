@@ -23,6 +23,7 @@ public class NoiseGenerator : MonoBehaviour
     public WorleyNoiseSetting[] detailSettings;
 
     public ComputeShader noiseCompute;
+    public ComputeShader copy;
 
     [Header("Viewer Settings")]
     public bool viewerEnabled = true;
@@ -44,7 +45,9 @@ public class NoiseGenerator : MonoBehaviour
     public RenderTexture shapeTexture;
     [SerializeField, HideInInspector]
     public RenderTexture detailTexture;
-    private bool needUpdate = true;
+    private bool updateNoise = true;
+    [HideInInspector]
+    public bool showSettingsEditor = true;
     private TextureChannel generatedChannel;
     private CloudNoiseType generatedType;
 
@@ -55,18 +58,18 @@ public class NoiseGenerator : MonoBehaviour
         CreateTexture(ref shapeTexture, shapeResolution, shapeNoiseName);
         CreateTexture(ref detailTexture, detailResolution, detailNoiseName);
 
-        WorleyNoiseSetting activeSetting = ActiveSetting;
 
-        if (SettingChanged())
-        {
-            needUpdate = true;
-        }
-
-        if (!needUpdate || !noiseCompute || !activeSetting)
+        if (!updateNoise || !noiseCompute)
         {
             return false;
         }
-        needUpdate = false;
+        updateNoise = false;
+        WorleyNoiseSetting activeSetting = ActiveSetting;
+        if (activeSetting == null)
+        {
+            return false;
+        }
+
         generatedChannel = activeChannel;
         generatedType = activeTextureType;
         var timer = System.Diagnostics.Stopwatch.StartNew ();
@@ -102,6 +105,18 @@ public class NoiseGenerator : MonoBehaviour
             buffer.Release();
         }
         return true;
+    }
+    public void ManualUpdate()
+    {
+        updateNoise = true;
+        UpdateNoise();
+    }
+    public void ActiveNoiseSettingsChanged()
+    {
+        if (autoUpdate)
+        {
+            updateNoise = true;
+        }
     }
     void UpdateWorley(WorleyNoiseSetting setting)
     {
@@ -205,6 +220,20 @@ public class NoiseGenerator : MonoBehaviour
                 (activeChannel == NoiseGenerator.TextureChannel.A) ? 1 : 0
             );
             return channelWeight;
+        }
+    }
+
+    public void Load(string saveName, RenderTexture target)
+    {
+        string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        saveName = sceneName + "_" + saveName;
+        Texture3D savedTex = (Texture3D)Resources.Load(saveName);
+        if (savedTex != null && savedTex.width == target.width)
+        {
+            copy.SetTexture(0, "tex", savedTex);
+            copy.SetTexture(0, "renderTex", target);
+            int numThreadGroups = Mathf.CeilToInt(savedTex.width / 8f);
+            copy.Dispatch(0, numThreadGroups, numThreadGroups, numThreadGroups);
         }
     }
 
