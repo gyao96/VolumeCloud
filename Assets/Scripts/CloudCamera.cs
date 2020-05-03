@@ -86,7 +86,7 @@ public class CloudCamera : MonoBehaviour
 
         int threadGroupsX = Mathf.CeilToInt(cam.pixelWidth / 8.0f);
         int threadGroupsY = Mathf.CeilToInt(cam.pixelHeight / 8.0f);
-        cloudShader.Dispatch(0, threadGroupsX, threadGroupsY, 1);
+        cloudShader.Dispatch(0, threadGroupsX, threadGroupsY, 16);
 
         // Blit the result texture to the screen
         Graphics.Blit(target, destination);
@@ -143,6 +143,7 @@ public class CloudCamera : MonoBehaviour
         cloudShader.SetFloat("detailSpeed", detailSpeed);
         cloudShader.SetVector("skyBaseColor", skyBase);
         cloudShader.SetVector("skyTintColor", skyTint);
+        cloudShader.SetVector("_LightColor", lightSource.color);
     }
 
     void SetTextures()

@@ -10,12 +10,14 @@ Texture2D<float4> WhetherMap;
 
 SamplerState samplerNoiseTex;
 SamplerState samplerDetailNoiseTex;
+SamplerState samplerBlueNoise;
 SamplerState samplerWhetherMap;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
 
 float3 _Light;
+float4 _LightColor;
 bool positionLight;
 
 float scale;
@@ -43,7 +45,7 @@ float4 skyBaseColor;
 float4 skyTintColor;
 
 static const float maxDst = 3000;
-static const float epsilon = 0.001f;
+static const float epsilon = 0.1f;
 static const float shadowBias = epsilon * 50;
 
 struct CloudBox
@@ -92,11 +94,6 @@ Ray CreateCameraRay(float2 uv)
     return CreateRay(origin, direction);
 }
 
-float GetShapeDistance(CloudBox box, float3 eye)
-{
-    return CubeDistance(eye, box.position, box.size);
-    // return maxDst;
-}
 
 // Returns (dstToBox, dstInsideBox). If ray misses box, dstInsideBox will be zero
 float2 rayBoxDst(float3 boxpos, float3 boxsize, float3 rayOrigin, float3 invRaydir)
@@ -143,7 +140,7 @@ float SampleDensity(float3 position)
     float3 uvw = (box.size * 0.5f + position) * baseScale * scale;
     float3 shapeSamplePos = uvw + shapeOffset * offsetSpeed;
     
-    // TODO: Calculate fade off along edges of xz plane
+    // Calculate fade off along edges of xz plane
     const float containerEdgeFadeDst = 50.0f;
     float3 boundsMin = center - box.size / 2.0f;
     float3 boundsMax = center + box.size / 2.0f;
@@ -151,12 +148,12 @@ float SampleDensity(float3 position)
     float dstFromEdgeZ = min(containerEdgeFadeDst, min(position.z - boundsMin.z, boundsMax.z - position.z));
     float edgeWeight = min(dstFromEdgeZ, dstFromEdgeX) / containerEdgeFadeDst;
     
-    // TODO: Calculate height gradient from weather map
+    // Calculate height gradient from weather map
     float2 weatherUV = (box.size.xz * 0.5f + (position.xz - center.xz)) / max(box.size.x, box.size.z);
     float wNoise = WhetherMap.SampleLevel(samplerWhetherMap, weatherUV, mipmapLevel).x;
     float gMin = remap(wNoise.x, 0, 1, 0.1, 0.5);
     float gMax = remap(wNoise.x, 0, 1, gMin, 0.9);
-    float heightPercent = (position.y - boundsMin.y) / box.size.y;
+    float heightPercent = -(position.y - boundsMax.y) / box.size.y;
     float heightGradient = saturate(remap(heightPercent, 0.0, gMin, 0, 1)) * saturate(remap(heightPercent, 1, gMax, 0, 1));
     heightGradient *= edgeWeight;
     
@@ -169,7 +166,15 @@ float SampleDensity(float3 position)
 
     if (baseShapeDensity > 0)
     {
-        return baseShapeDensity;
+        float3 detailSamplePos = uvw * detailNoiseScale + detailOffset * offsetSpeed;
+        float4 detailNoise = DetailNoiseTex.SampleLevel(samplerDetailNoiseTex, detailSamplePos, mipmapLevel);
+        float3 normalizedDetailWeights = detailWeights / dot(detailWeights, 1);
+        float detailFBM = dot(detailNoise.xyz, normalizedDetailWeights);
+        float oneMinusShape = 1 - shapeFBM;
+        float detailErodeWeight = oneMinusShape * oneMinusShape * oneMinusShape;
+        float cloudDensity = baseShapeDensity - (1 - detailFBM) * detailErodeWeight * detailNoiseWeight;
+    
+        return cloudDensity * densityMultiplier * 0.1;
     }
     return 0.0f;
 }
@@ -177,7 +182,7 @@ float SampleDensity(float3 position)
 float LightMarch(float3 position)
 {
     // March from point on ray
-    float3 dirToLight = _Light - position;
+    float3 dirToLight = _Light;
 
     float dstInsideBox = rayBoxDst(box.position, box.size, position, 1 / dirToLight).y;
                 
@@ -194,7 +199,27 @@ float LightMarch(float3 position)
     return darknessThreshold + transmittance * (1 - darknessThreshold);
 }
 
-[numthreads(8, 8, 8)]
+// Henyey-Greenstein
+float hg(float a, float g)
+{
+    float g2 = g * g;
+    return (1 - g2) / (4 * 3.1415 * pow(1 + g2 - 2 * g * (a), 1.5));
+}
+
+float phase(float a)
+{
+    float blend = .5;
+    float hgBlend = hg(a, phaseParams.x) * (1 - blend) + hg(a, -phaseParams.y) * blend;
+    return phaseParams.z + hgBlend * phaseParams.w;
+}
+
+float beer(float d)
+{
+    float beer = exp(-d);
+    return beer;
+}
+
+[numthreads(8, 8, 16)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
     uint width, height;
@@ -209,6 +234,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     int marchSteps = 0;
     
     box = cbox[0];
+    
 
     float2 rayToBoxInfo = rayBoxDst(box.position, box.size, ray.origin, 1.0f / ray.direction);
     float dstToBox = rayToBoxInfo.x;
@@ -216,14 +242,21 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     // Point of entry from ray into the cloud container
     float3 entryPoint = ray.origin + ray.direction * dstToBox;
     
-    // TODO: Phase Function
+    // random offset
+    float randomOffset = BlueNoise.SampleLevel(samplerBlueNoise, id.xy, 0);
+    randomOffset *= rayOffsetStrength;
+    
+    // Phase function makes clouds brighter around sun
+    float cosAngle = dot(ray.direction, _Light);
+    float phaseVal = phase(cosAngle);
+    
     float dstLimit = min(maxDst - dstToBox, dstInsideBox);
     
     // March through the volume
-    float dstTravelled = 0.0f;
+    float dstTravelled = randomOffset;
     float transmittance = 1.0f;
     float lightEnergy = 0.0f;
-    const float STEPSIZE = 2.0f;
+    const float STEPSIZE = 24.0f;
     
     float3 rayPos;
     while (dstTravelled < dstLimit)
@@ -233,7 +266,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         if (density > 0)
         {
             float lightTransmittance = LightMarch(rayPos);
-            lightEnergy += density * STEPSIZE * transmittance * lightTransmittance;
+            lightEnergy += density * STEPSIZE * transmittance * lightTransmittance * phaseVal;
             transmittance *= exp(-density * STEPSIZE * lightAbsorptionFromCloud);
             if (transmittance < 0.01f)
             {
@@ -243,10 +276,22 @@ void CSMain(uint3 id : SV_DispatchThreadID)
         dstTravelled += STEPSIZE;
     }
     
+    // sky + background
+    float3 skyColor = lerp(skyBaseColor.rgb, skyTintColor.rgb, sqrt(abs(saturate(ray.direction.y))));
     float3 bgColor = Source[id.xy];
-    float3 LightColor = float3(1, 1, 1);
-    float3 cloudColor = lightEnergy * LightColor;
+    float depth = 0.0f;
+    float3 dstFog = 1 - exp(-max(0, depth)*8*0.0001);
+    float3 sky = dstFog * skyColor;
+    bgColor = bgColor * (1 - dstFog) + sky;
+    
+    // Sun
+    float focusedEyeCos = pow(saturate(cosAngle), params.x);
+    float sun = saturate(hg(focusedEyeCos, 0.9995f)) * transmittance;
+    
+    // Render Clouds
+    float3 cloudColor = lightEnergy * _LightColor.rgb;
     float3 color = bgColor * transmittance + cloudColor;
+    color = saturate(color) * (1.0f - sun) + _LightColor.rgb * sun;
     Destination[id.xy] = float4(color, 1.0f);
 /*
     while (rayDst < maxDst)

@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 708a441f40a7e5546b26f192d65fb1cb, type: 3}
-  m_Name: Shape_2
+  m_Name: Detail_1
   m_EditorClassIdentifier: 
-  seed: 7
-  numDivisionsA: 17
-  numDivisionsB: 22
-  numDivisionsC: 32
-  persistence: 0.33
+  seed: 0
+  numDivisionsA: 23
+  numDivisionsB: 25
+  numDivisionsC: 31
+  persistence: 0.5
   tile: 1
   invert: 1
