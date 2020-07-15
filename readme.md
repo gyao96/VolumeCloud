@@ -28,6 +28,7 @@ There are three types of clouds distinguishable by their art style and technical
 We plan to implement the geometric cloud in Unity. The expected visual should some how resembles that from Astroneer.
 ![](https://i.imgur.com/x8fORyg.jpg)
 We plan to first use the ray-marching toolkit from unity just to have an experiment of how blending simple geometries can give us shapes that look like clouds. If the toolkit isn't sufficient, then we will dive deep into coding our own ray marching shader in unity to create our own custom looking geometric cloud. We will use constructive solid geometry (CSG) to blend simple shapes. CSG is a method of creating complex geometric shapes from simple ones via boolean operations. The following diagram from WikiPedia shows what’s possible with the technique, and the toolkit implementation from Unity.
+
 ![](/Recordings/blend.png)
 ![](/Recordings/geo_cloud.png)
 
